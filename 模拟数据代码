@@ -1,0 +1,199 @@
+import pandas as pd
+import numpy as np
+
+# 设置随机种子保证可重复性
+np.random.seed(42)
+
+# 生成1000条样本数据
+n_samples = 100000
+
+# 生成模拟数据
+data = pd.DataFrame({
+    # 唯一用户ID
+    'user_id': [f'UID_{i+1000}' for i in range(n_samples)],
+    
+    # 年龄（18-65岁，正态分布）
+    'age': np.clip(np.random.normal(loc=35, scale=10, size=n_samples), 18, 65).astype(int),
+    
+    # 月收入（单位：元，右偏分布）
+    'monthly_income': np.round(np.abs(np.random.gamma(shape=2, scale=8000, size=n_samples)) + 3000),
+    
+    # 页面浏览量（泊松分布）
+    'page_views': np.random.poisson(lam=8, size=n_samples),
+    
+    # 上次访问天数（指数分布）
+    'last_visit_days': np.random.exponential(scale=7, size=n_samples).astype(int),
+    
+    # 加购次数（0-5次）
+    'cart_additions': np.random.binomial(n=5, p=0.3, size=n_samples),
+    
+    # 是否购买（30%购买率）
+    'purchased': np.random.choice([0, 1], size=n_samples, p=[0.7, 0.3])
+})
+
+# 添加合理的数据关联性
+data.loc[data['purchased'] == 1, 'page_views'] += np.random.randint(2, 5, size=data['purchased'].sum())
+data.loc[data['purchased'] == 1, 'last_visit_days'] = np.clip(data.loc[data['purchased'] == 1, 'last_visit_days'] - 2, 0, None)
+data.loc[data['purchased'] == 1, 'cart_additions'] += np.random.randint(1, 3, size=data['purchased'].sum())
+
+# 添加少量缺失值（5%的月收入缺失）
+missing_mask = np.random.rand(n_samples) < 0.05
+data.loc[missing_mask, 'monthly_income'] = np.nan
+
+# 保存为CSV文件
+data.to_csv('customer_purchase_data.csv', index=False, encoding='utf-8-sig')
+
+print("CSV文件已生成！包含以下示例数据：")
+print(data.head(10))
+
+
+
+
+
+
+
+
+
+
+
+#生成模拟数据常用代码
+import pandas as pd
+import numpy as np
+from faker import Faker
+from datetime import datetime, timedelta
+
+# 初始化Faker生成器（需要先安装：pip install faker）
+fake = Faker('zh_CN')  # 生成中文模拟数据
+
+# 设置随机种子保证可重复性
+np.random.seed(42)
+fake.seed_instance(42)
+
+# 生成1000条样本数据
+n_samples = 1000
+
+# ======================
+# 常用模拟数据生成指令
+# ======================
+
+# 1. 分类变量生成示例
+def generate_categorical():
+    return {
+        # 性别（加权分布）
+        'gender': np.random.choice(['男', '女'], size=n_samples, p=[0.55, 0.45]),
+        
+        # 城市（带权重分布）
+        'city': np.random.choice(
+            ['北京', '上海', '广州', '深圳', '成都'], 
+            size=n_samples,
+            p=[0.2, 0.3, 0.15, 0.25, 0.1]
+        ),
+        
+        # 用户类型（分层数据）
+        'user_type': np.where(
+            np.random.rand(n_samples) > 0.8, 
+            'VIP', 
+            np.where(np.random.rand(n_samples) > 0.6, 'Premium', 'Standard')
+        )
+    }
+
+# 2. 日期时间生成示例
+def generate_datetime():
+    start_date = datetime(2020, 1, 1)
+    return {
+        # 随机日期（过去3年内）
+        'register_date': [
+            fake.date_between(start_date='-3y', end_date='today') 
+            for _ in range(n_samples)
+        ],
+        
+        # 时间序列数据（最后登录时间）
+        'last_login': [
+            fake.date_time_between(start_date='-30d', end_date='now') 
+            for _ in range(n_samples)
+        ]
+    }
+
+# 3. 文本数据生成示例
+def generate_text():
+    return {
+        # 产品名称（自定义模式）
+        'product': [fake.random_element([
+            "智能手机-{}".format(fake.numerify("####")),
+            "笔记本电脑-{}".format(fake.lexify("???")),
+            "智能手表-{}".format(fake.bothify("??-##"))
+        ]) for _ in range(n_samples)],
+        
+        # 评论文本（带情感倾向）
+        'review': [
+            fake.sentence(nb_words=6) if x < 0.7 else fake.sentence(nb_words=6, ext_word_list=['差', '不好', '失望'])
+            for x in np.random.rand(n_samples)
+        ]
+    }
+
+# 4. 复杂分布生成示例
+def generate_complex_features():
+    return {
+        # 混合分布收入（生成更真实的收入曲线）
+        'monthly_income': np.round(
+            np.where(
+                np.random.rand(n_samples) > 0.8,
+                np.abs(np.random.normal(30000, 5000, n_samples)),  # 高收入群体
+                np.abs(np.random.gamma(2, 5000, n_samples) + 3000)  # 普通群体
+            )
+        ),
+        
+        # 设备类型（与城市关联）
+        'device': np.where(
+            data['city'].isin(['北京', '上海']),
+            np.random.choice(['iPhone', 'Huawei', 'Xiaomi'], p=[0.6, 0.3, 0.1]),
+            np.random.choice(['Android', 'Other'], p=[0.8, 0.2])
+        )
+    }
+
+# 5. 生成关联性数据示例
+def generate_correlated_features():
+    return {
+        # 与购买行为相关的登录次数
+        'login_counts': np.where(
+            data['purchased'] == 1,
+            np.random.poisson(lam=10, size=n_samples),
+            np.random.poisson(lam=3, size=n_samples)
+        ),
+        
+        # 与城市相关的折扣力度
+        'discount_rate': np.where(
+            data['city'].isin(['北京', '上海']),
+            np.clip(np.random.normal(0.2, 0.05, n_samples), 0, 0.3),
+            np.clip(np.random.normal(0.15, 0.1, n_samples), 0, 0.25)
+        )
+    }
+
+# ======================
+# 主数据生成流程
+# ======================
+data = pd.DataFrame({
+    # 基础字段
+    'user_id': [f'UID_{i+1000}' for i in range(n_samples)],
+    'age': np.clip(np.random.normal(loc=35, scale=10, size=n_samples), 18, 65).astype(int),
+    'purchased': np.random.choice([0, 1], size=n_samples, p=[0.7, 0.3]),
+    
+    # 集成其他生成器
+    **generate_categorical(),
+    **generate_datetime(),
+    **generate_text(),
+    **generate_complex_features(),
+    **generate_correlated_features()
+})
+
+# 添加智能关联逻辑（示例）
+data['purchased_prob'] = 1 / (1 + np.exp(-(
+    0.3 * data['login_counts'] + 
+    0.2 * (data['monthly_income'] / 10000) - 
+    0.1 * data['last_visit_days']
+))
+data['purchased'] = np.where(data['purchased_prob'] > np.random.rand(n_samples), 1, 0)
+
+# 保存为CSV文件
+data.to_csv('enhanced_customer_data.csv', index=False, encoding='utf-8-sig')
+print("增强版数据文件已生成！")
