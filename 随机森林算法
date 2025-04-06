@@ -1,0 +1,161 @@
+# -*- coding: utf-8 -*-
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (accuracy_score, roc_auc_score,
+                             confusion_matrix, classification_report)
+import seaborn as sns
+import joblib
+
+# ======================
+# 1. 数据导入与预处理
+# ======================
+
+# 1.1 导入数据
+try:
+    raw_data = pd.read_csv('customer_purchase_data.csv', encoding='gbk')  # 中文常用编码
+except:
+    raw_data = pd.read_csv('customer_purchase_data.csv', encoding='utf-8-sig')
+
+print("【原始数据概览】")
+print(f"数据维度: {raw_data.shape}")
+print("\n前3行数据:")
+print(raw_data.head(3))
+print("\n数据类型统计:")
+print(raw_data.dtypes)
+
+# 1.2 数据清洗
+# 处理缺失值示例
+data_clean = raw_data.copy()
+data_clean.fillna({
+    'age': data_clean['age'].median(),
+    'monthly_income': data_clean['monthly_income'].mean(),
+    'last_visit_days': 30  # 对缺失访问天数填充默认值
+}, inplace=True)
+
+# 删除无关列示例
+if 'user_id' in data_clean.columns:
+    data_clean.drop('user_id', axis=1, inplace=True)
+
+# 转换日期类型示例（如果存在日期字段）
+if 'register_date' in data_clean.columns:
+    data_clean['register_date'] = pd.to_datetime(data_clean['register_date'])
+    data_clean['register_year'] = data_clean['register_date'].dt.year
+
+# ======================
+# 2. 特征工程
+# ======================
+
+# 选择特征与目标变量
+features = ['age', 'monthly_income', 'page_views', 'last_visit_days', 'cart_additions']
+target = 'purchased'  # 目标变量需为0/1二元变量
+
+X = data_clean[features]
+y = data_clean[target]
+
+# 标准化处理（保持DataFrame结构）
+scaler = StandardScaler()
+X_scaled = pd.DataFrame(
+    scaler.fit_transform(X),
+    columns=X.columns,  # 保留列名
+    index=X.index
+)
+
+# ======================
+# 3. 划分数据集
+# ======================
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled,  # 使用标准化后的DataFrame
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y  # 保持类别分布
+)
+
+# ======================
+# 4. 模型训练
+# ======================
+rf_model = RandomForestClassifier(
+    n_estimators=200,     # 增加树的数量提升稳定性
+    max_depth=7,          # 适当增加深度捕捉更多模式
+    class_weight='balanced',  # 处理类别不平衡
+    min_samples_split=10, # 防止过拟合
+    random_state=42
+)
+
+rf_model.fit(X_train, y_train)
+
+# ======================
+# 5. 模型评估
+# ======================
+# 5.1 预测结果
+y_pred = rf_model.predict(X_test)
+y_prob = rf_model.predict_proba(X_test)[:, 1]  # 正类概率
+
+# 5.2 评估指标
+print("\n【模型性能评估】")
+print(f"准确率: {accuracy_score(y_test, y_pred):.3f}")
+print(f"AUC值: {roc_auc_score(y_test, y_prob):.3f}")
+print("\n分类报告:")
+print(classification_report(y_test, y_pred, target_names=['未购买', '购买']))
+
+# 5.3 混淆矩阵（配置中文显示）
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+cm = confusion_matrix(y_test, y_pred)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+            xticklabels=['预测未购', '预测购买'],
+            yticklabels=['实际未购', '实际购买'])
+plt.title('混淆矩阵')
+plt.show()
+
+# ======================
+# 6. 特征重要性分析
+# ======================
+feature_importance = pd.Series(
+    rf_model.feature_importances_,
+    index=features
+).sort_values(ascending=False)
+
+print("\n【特征重要性排序】")
+print(feature_importance)
+
+plt.figure(figsize=(10,6))
+sns.barplot(x=feature_importance.values, y=feature_importance.index)
+plt.title('购买预测特征重要性')
+plt.xlabel('重要性分数')
+plt.ylabel('特征')
+plt.show()
+
+# ======================
+# 7. 模型应用示例
+# ======================
+# 新用户数据预测示例
+new_user = pd.DataFrame([{
+    'age': 35,
+    'monthly_income': 25000,
+    'page_views': 15,
+    'last_visit_days': 3,
+    'cart_additions': 2
+}])
+
+# 必须使用相同的标准化器
+new_user_scaled = pd.DataFrame(
+    scaler.transform(new_user),
+    columns=features
+)
+
+# 预测概率
+prob = rf_model.predict_proba(new_user_scaled)[0][1]
+print(f"\n新用户购买概率预测: {prob:.1%}")
+
+# ======================
+# 8. 模型保存
+# ======================
+joblib.dump(rf_model, 'purchase_predict_model.pkl')
+joblib.dump(scaler, 'scaler.pkl')
+print("\n模型和标准化器已保存到本地文件")
